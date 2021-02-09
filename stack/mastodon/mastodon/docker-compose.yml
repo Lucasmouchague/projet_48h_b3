@@ -1,0 +1,124 @@
+version: '3'
+services:
+
+  db:
+    restart: always
+    container_name: db
+    image: postgres:9.6-alpine
+    shm_size: 256mb
+    environment:
+      POSTGRES_PASSWORD: 'toortoor'
+      POSTGRES_USER: 'mastodon'
+      POSTGRES_DB: 'mastodon'
+    networks:
+      - externe
+      - proxy
+      - interne
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "mastodon"]
+    volumes:
+      - ./postgres:/var/lib/postgresql/data
+
+  redis:
+    restart: always
+    container_name: redis
+    image: redis:6.0-alpine
+    networks:
+      - interne
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+    volumes:
+      - ./redis:/data
+
+  web:
+    build: .
+    image: tootsuite/mastodon
+    restart: always
+    env_file: .env.production
+    command: bash -c "rm -f /mastodon/tmp/pids/server.pid; bundle exec rails s -p 3000"
+    networks:
+      - proxy
+      - externe
+      - interne
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --proxy=off localhost:3000/health || exit 1"]
+    # expose:
+    #   - "3000"
+    # ports:
+    #   - "3000:3000"
+    depends_on:
+      - db
+      - redis
+    volumes:
+      - ./public/system:/mastodon/public/system
+      
+    # labels:
+    #   - traefik.enable=true
+    #   - traefik.http.routers.web.entrypoints=web
+    #   - traefik.http.services.web.loadbalancer.server.port=3000
+    #   # - traefik.docker.preferred_network=proxy
+    #   - traefik.http.routers.web.rule=Host(`social.commentfairedu.biz`)
+    labels:
+      traefik.http.middlewares.redirect.redirectscheme.scheme: https
+      traefik.http.routers.web-http.entrypoints: web
+      traefik.http.routers.web-http.middlewares: redirect
+      traefik.http.routers.web-http.rule: 'Host(`social.commentfairedu.biz`)'
+      traefik.http.routers.web.entrypoints: web-secure
+      traefik.http.routers.web.rule: 'Host(`social.commentfairedu.biz`)'
+      traefik.http.routers.web.tls: 'true'
+    
+
+  streaming:
+    build: .
+    image: tootsuite/mastodon
+    restart: always
+    env_file: .env.production
+    command: node ./streaming
+    networks:
+      - externe
+      - interne
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider --proxy=off localhost:4000/api/v1/streaming/health || exit 1"]
+    ports:
+      - "4000:4000"
+    depends_on:
+      - db
+      - redis
+
+  sidekiq:
+    build: .
+    image: tootsuite/mastodon
+    restart: always
+    env_file: .env.production
+    command: bundle exec sidekiq
+    depends_on:
+      - db
+      - redis
+    networks:
+      - externe
+      - interne
+    volumes:
+      - ./public/system:/mastodon/public/system
+## Uncomment to enable federation with tor instances along with adding the following ENV variables
+## http_proxy=http://privoxy:8118
+## ALLOW_ACCESS_TO_HIDDEN_SERVICE=true
+#  tor:
+#    image: sirboops/tor
+#    networks:
+#      - externe
+#      - interne
+#
+#  privoxy:
+#    image: sirboops/privoxy
+#    volumes:
+#      - ./priv-config:/opt/config
+#    networks:
+#      - externe
+#      - interne
+
+networks:
+  externe:
+  interne:
+    internal: true
+  proxy:
+    external: true

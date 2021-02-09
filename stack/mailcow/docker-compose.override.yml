@@ -1,0 +1,36 @@
+version: '2.1'
+
+services:
+  nginx-mailcow:
+    expose:
+      - 8080
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.nginx-mailcow.entrypoints=web
+      - traefik.http.routers.nginx-mailcow.rule=Host(`mail.jesuisendefic.it`)
+      - traefik.http.services.nginx-mailcow.loadbalancer.server.port=8080
+    networks:
+      - proxy
+
+
+  # certdumper:
+  #     image: humenius/traefik-certs-dumper
+  #     network_mode: none
+  #     command: --restart-containers mailcow_postfix-mailcow_1,mailcow_dovecot-mailcow_1,mailcow_nginx-mailcow_1
+  #     volumes:
+  #       - /home/nawak/EU1_Files/docker-stack/traefik/data:/traefik:ro
+  #       - /var/run/docker.sock:/var/run/docker.sock:ro
+  #       - ./data/assets/ssl:/output:rw
+  #     environment:
+  #       - DOMAIN=orangecyberdefense.cloud,dirisi.fun
+  #       # - DOMAIN=${MAILCOW_HOSTNAME}
+  #       # If using wildcard certs instead of an explicit host cert,
+  #       # use following line instead with just the TLD so certdumper
+  #       # is able to find the cert.
+  #       # - DOMAIN=YourDomain.com
+
+networks:
+  proxy:
+    external: true
+
+    
